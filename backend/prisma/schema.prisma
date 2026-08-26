@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & Teams
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teamId       String?
+  team         Team?    @relation(fields: [teamId], references: [id])
+
+  submissions  Submission[]
+
+  @@map("users")
+}
+
+model Team {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  inviteCode String   @unique @default(uuid())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  members    User[]
+  scores     Score[]
+
+  @@map("teams")
+}
+
+// ---------------------------------------------------------------------------
+// Challenges
+// ---------------------------------------------------------------------------
+
+enum ChallengeCategory {
+  WEB
+  CRYPTO
+  FORENSICS
+  REVERSE_ENGINEERING
+  MISC
+  PWN
+}
+
+model Challenge {
+  id          String            @id @default(uuid())
+  title       String
+  description String
+  category    ChallengeCategory
+  points      Int               @default(100)
+  flagHash    String
+  filePath    String?
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  submissions Submission[]
+
+  @@map("challenges")
+}
+
+// ---------------------------------------------------------------------------
+// Submissions & Scoring
+// ---------------------------------------------------------------------------
+
+model Submission {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id])
+
+  isCorrect   Boolean
+  submittedAt DateTime @default(now())
+
+  // Prevent a team/user from getting duplicate point credit for the same challenge
+  @@unique([userId, challengeId, isCorrect])
+  @@map("submissions")
+}
+
+model Score {
+  id        String   @id @default(uuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+
+  points    Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId])
+  @@map("scores")
+}
