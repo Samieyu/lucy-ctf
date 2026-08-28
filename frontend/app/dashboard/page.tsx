@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import Link from 'next/link';
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
@@ -48,10 +49,14 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <p className="mt-6 text-sm text-neutral-500">
-          Challenge listing, leaderboard, and team management are coming in
-          later phases.
-        </p>
+        <div className="mt-6">
+  <Link
+    href="/team"
+    className="text-sm text-emerald-500 hover:underline"
+  >
+    Manage your team →
+  </Link>
+</div>
       </div>
     </div>
   );
