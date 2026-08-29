@@ -122,12 +122,17 @@ export default function TeamPage() {
             <div className="mt-4">
               <p className="mb-2 text-sm text-neutral-400">Members</p>
               <ul className="space-y-1">
-                {team.members.map((m) => (
-                  <li key={m.id} className="text-sm text-neutral-300">
-                    {m.username}
-                  </li>
-                ))}
-              </ul>
+                  {team.members.map((m) => (
+                    <li key={m.id} className="text-sm text-neutral-300">
+                      {m.username}
+                      {m.id === team.captainId && (
+                        <span className="ml-2 rounded bg-emerald-900 px-1.5 py-0.5 text-xs text-emerald-400">
+                          Captain
+                        </span>
+                      )}
+                    </li>
+                  ))}
+               </ul>
             </div>
 
             <button

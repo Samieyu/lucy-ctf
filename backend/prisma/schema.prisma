@@ -61,7 +61,7 @@ enum ChallengeCategory {
 
 model Challenge {
   id          String            @id @default(uuid())
-  title       String
+  title       String            @unique
   description String
   category    ChallengeCategory
   points      Int               @default(100)
