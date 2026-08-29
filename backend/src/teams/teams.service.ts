@@ -15,31 +15,31 @@ export class TeamsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createTeam(userId: string, dto: CreateTeamDto) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (user?.teamId) {
-      throw new ConflictException('You are already on a team');
-    }
-
-    const existingName = await this.prisma.team.findUnique({
-      where: { name: dto.name },
-    });
-
-    if (existingName) {
-      throw new ConflictException('Team name already taken');
-    }
-
-    const team = await this.prisma.team.create({
-      data: { name: dto.name },
-    });
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { teamId: team.id },
-    });
-
-    return team;
+  if (user?.teamId) {
+    throw new ConflictException('You are already on a team');
   }
+
+  const existingName = await this.prisma.team.findUnique({
+    where: { name: dto.name },
+  });
+
+  if (existingName) {
+    throw new ConflictException('Team name already taken');
+  }
+
+  const team = await this.prisma.team.create({
+    data: { name: dto.name, captainId: userId },
+  });
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { teamId: team.id },
+  });
+
+  return team;
+}
 
   async joinTeam(userId: string, dto: JoinTeamDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -70,34 +70,64 @@ export class TeamsService {
   }
 
   async getMyTeam(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        team: {
-          include: {
-            members: {
-              select: { id: true, username: true, email: true },
-            },
+  const user = await this.prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      team: {
+        include: {
+          members: {
+            select: { id: true, username: true, email: true },
           },
         },
       },
-    });
+    },
+  });
 
-    return user?.team || null;
-  }
+  if (!user?.team) return null;
+
+  return {
+    ...user.team,
+    isCaptain: user.team.captainId === userId,
+  };
+}
 
   async leaveTeam(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (!user?.teamId) {
-      throw new BadRequestException('You are not on a team');
-    }
+  if (!user?.teamId) {
+    throw new BadRequestException('You are not on a team');
+  }
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { teamId: null },
-    });
+  const teamId = user.teamId;
 
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { teamId: null },
+  });
+
+  const team = await this.prisma.team.findUnique({
+    where: { id: teamId },
+    include: { members: true },
+  });
+
+  if (!team) {
     return { success: true };
   }
+
+  const wasCaptain = team.captainId === userId;
+
+  if (team.members.length === 0) {
+    // Last member left — clean up the now-empty team
+    await this.prisma.team.delete({ where: { id: teamId } });
+  } else if (wasCaptain) {
+    // Promote the next remaining member to captain
+    const newCaptain = team.members[0];
+    await this.prisma.team.update({
+      where: { id: teamId },
+      data: { captainId: newCaptain.id },
+    });
+  }
+
+  return { success: true };
+}
 }

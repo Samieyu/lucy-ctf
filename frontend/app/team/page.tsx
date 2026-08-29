@@ -14,6 +14,8 @@ interface Team {
   id: string;
   name: string;
   inviteCode: string;
+  isCaptain: boolean;
+  captainId: string;
   members: TeamMember[];
 }
 

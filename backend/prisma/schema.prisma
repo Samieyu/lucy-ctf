@@ -23,6 +23,7 @@ model User {
 
   teamId       String?
   team         Team?    @relation(fields: [teamId], references: [id])
+  captainOfTeam Team? @relation("TeamCaptain")
 
   submissions  Submission[]
 
@@ -36,7 +37,10 @@ model Team {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  members    User[]
+  captainId  String?  @unique
+  captain    User?    @relation("TeamCaptain", fields: [captainId], references: [id])
+
+  members    User[]   @relation
   scores     Score[]
 
   @@map("teams")
