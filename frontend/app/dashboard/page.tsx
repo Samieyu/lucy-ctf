@@ -49,14 +49,26 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="mt-6">
-  <Link
-    href="/team"
-    className="text-sm text-emerald-500 hover:underline"
-  >
-    Manage your team →
-  </Link>
-</div>
+        <div className="mt-6 space-y-2">
+          <div>
+            <Link
+              href="/team"
+              className="text-sm text-emerald-500 hover:underline"
+            >
+              Manage your team →
+            </Link>
+          </div>
+          {user.isAdmin && (
+            <div>
+              <Link
+                href="/admin/challenges"
+                className="text-sm text-amber-500 hover:underline"
+              >
+                Manage challenges (admin) →
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
