@@ -141,8 +141,15 @@ describe('SubmissionsService', () => {
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.score.upsert).toHaveBeenCalledWith({
       where: { teamId: 't1' },
-      update: { points: { increment: 100 } },
-      create: { teamId: 't1', points: 100 },
+      update: {
+        points: { increment: 100 },
+        lastScoredAt: expect.any(Date),
+      },
+      create: {
+        teamId: 't1',
+        points: 100,
+        lastScoredAt: expect.any(Date),
+      },
     });
   });
 });

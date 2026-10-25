@@ -95,12 +95,13 @@ model Submission {
 }
 
 model Score {
-  id        String   @id @default(uuid())
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id])
+  id           String   @id @default(uuid())
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id])
 
-  points    Int      @default(0)
-  updatedAt DateTime @updatedAt
+  points       Int      @default(0)
+  lastScoredAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([teamId])
   @@map("scores")

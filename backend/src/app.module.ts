@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { TeamsModule } from './teams/teams.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { LeaderboardModule } from './leaderboard/leaderboard.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
     TeamsModule,
     ChallengesModule,
     SubmissionsModule,
+    LeaderboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

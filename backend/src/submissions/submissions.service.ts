@@ -94,16 +94,19 @@ export class SubmissionsService {
         },
       });
 
+      const now = new Date();
       await tx.score.upsert({
         where: { teamId: user.teamId! },
         update: {
           points: {
             increment: challenge.points,
           },
+          lastScoredAt: now,
         },
         create: {
           teamId: user.teamId!,
           points: challenge.points,
+          lastScoredAt: now,
         },
       });
     });
