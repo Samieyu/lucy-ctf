@@ -70,6 +70,39 @@ export class AuthService {
     });
   }
 
+  async refreshToken(token: string) {
+    if (!token) {
+      throw new UnauthorizedException('Refresh token is required');
+    }
+
+    try {
+      const refreshSecret =
+        process.env.JWT_REFRESH_SECRET ||
+        process.env.JWT_SECRET ||
+        'change_me_in_env';
+
+      const payload = this.jwtService.verify<JwtPayload>(token, {
+        secret: refreshSecret,
+      });
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User no longer exists');
+      }
+
+      return this.issueTokens({
+        sub: user.id,
+        email: user.email,
+        isAdmin: user.isAdmin,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
   private issueTokens(payload: JwtPayload) {
     const accessToken = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET || 'change_me_in_env',
@@ -77,7 +110,10 @@ export class AuthService {
     });
 
     const refreshToken = this.jwtService.sign(payload, {
-      secret: process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'change_me_in_env',
+      secret:
+        process.env.JWT_REFRESH_SECRET ||
+        process.env.JWT_SECRET ||
+        'change_me_in_env',
       expiresIn: '7d',
     });
 

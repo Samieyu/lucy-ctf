@@ -1,0 +1,66 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: lucyctf-db-prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lucyctf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lucyctf_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-lucyctf}
+    volumes:
+      - db_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lucyctf} -d ${POSTGRES_DB:-lucyctf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: lucyctf-api-prod
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-lucyctf}:${POSTGRES_PASSWORD:-lucyctf_secure_password}@db:5432/${POSTGRES_DB:-lucyctf}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_env_access}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_in_env_refresh}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: lucyctf-frontend-prod
+    restart: always
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      BACKEND_INTERNAL_URL: http://api:4000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  db_data_prod:

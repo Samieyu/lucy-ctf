@@ -81,13 +81,15 @@ describe('LeaderboardService', () => {
           rank: 1,
           name: 'Alpha Team',
           points: 500,
-          solveCount: 3, // c1, c2, c3
+          solves: 3,
+          solveCount: 3,
         },
         {
           rank: 2,
           name: 'Beta Team',
           points: 500,
-          solveCount: 1, // c1
+          solves: 1,
+          solveCount: 1,
         },
       ]);
     });
@@ -150,20 +152,26 @@ describe('LeaderboardService', () => {
       expect(result).toEqual([
         {
           rank: 1,
+          username: 'charlie',
           name: 'charlie',
           points: 300,
+          solves: 1,
           solveCount: 1,
         },
         {
           rank: 2,
-          name: 'bob', // tied on 200 points, but solved earlier than alice
+          username: 'bob',
+          name: 'bob',
           points: 200,
+          solves: 1,
           solveCount: 1,
         },
         {
           rank: 3,
+          username: 'alice',
           name: 'alice',
           points: 200,
+          solves: 1,
           solveCount: 1,
         },
       ]);

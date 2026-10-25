@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { ChallengeCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
@@ -38,11 +39,52 @@ export class ChallengesService {
     });
   }
 
-  async findAllPublic() {
-    return this.prisma.challenge.findMany({
-      where: { isActive: true },
-      select: PUBLIC_SELECT,
-      orderBy: { createdAt: 'asc' },
+  async findAllPublic(
+    user?: { id: string; teamId?: string | null },
+    category?: ChallengeCategory,
+  ) {
+    const where: { isActive: boolean; category?: ChallengeCategory } = {
+      isActive: true,
+    };
+    if (category) {
+      where.category = category;
+    }
+
+    const challenges = await this.prisma.challenge.findMany({
+      where,
+      select: {
+        ...PUBLIC_SELECT,
+        submissions: {
+          where: { isCorrect: true },
+          select: {
+            userId: true,
+            user: {
+              select: { teamId: true },
+            },
+          },
+        },
+      },
+      orderBy: { points: 'asc' },
+    });
+
+    return challenges.map((challenge) => {
+      const { submissions, ...data } = challenge;
+
+      const solved = Boolean(
+        user?.teamId
+          ? submissions.some((s) => s.user.teamId === user.teamId)
+          : user?.id && submissions.some((s) => s.userId === user.id),
+      );
+
+      const distinctSolvers = new Set(
+        submissions.map((s) => s.user.teamId || s.userId),
+      );
+
+      return {
+        ...data,
+        solved,
+        solveCount: distinctSolvers.size,
+      };
     });
   }
 
@@ -54,17 +96,47 @@ export class ChallengesService {
     });
   }
 
-  async findOnePublic(id: string) {
+  async findOnePublic(
+    id: string,
+    user?: { id: string; teamId?: string | null },
+  ) {
     const challenge = await this.prisma.challenge.findUnique({
       where: { id },
-      select: PUBLIC_SELECT,
+      select: {
+        ...PUBLIC_SELECT,
+        submissions: {
+          where: { isCorrect: true },
+          select: {
+            userId: true,
+            user: {
+              select: { teamId: true },
+            },
+          },
+        },
+      },
     });
 
     if (!challenge || !challenge.isActive) {
       throw new NotFoundException('Challenge not found');
     }
 
-    return challenge;
+    const { submissions, ...data } = challenge;
+
+    const solved = Boolean(
+      user?.teamId
+        ? submissions.some((s) => s.user.teamId === user.teamId)
+        : user?.id && submissions.some((s) => s.userId === user.id),
+    );
+
+    const distinctSolvers = new Set(
+      submissions.map((s) => s.user.teamId || s.userId),
+    );
+
+    return {
+      ...data,
+      solved,
+      solveCount: distinctSolvers.size,
+    };
   }
 
   async update(id: string, dto: UpdateChallengeDto) {

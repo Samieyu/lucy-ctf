@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -13,7 +14,7 @@ export class SubmissionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async submitFlag(challengeId: string, userId: string, dto: SubmitFlagDto) {
-    // 1. Verify user exists and belongs to a team
+    // 1. Verify user exists and belongs to a team (400 if no team)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, teamId: true },
@@ -38,17 +39,21 @@ export class SubmissionsService {
       throw new NotFoundException('Challenge not found');
     }
 
-    // 3. Block re-solving by the same user
-    const existingSolve = await this.prisma.submission.findFirst({
+    // 3. Block re-solving: return 409 if the user's TEAM already solved the challenge
+    const teamSolve = await this.prisma.submission.findFirst({
       where: {
-        userId: user.id,
         challengeId: challenge.id,
         isCorrect: true,
+        user: {
+          teamId: user.teamId,
+        },
       },
     });
 
-    if (existingSolve) {
-      throw new BadRequestException('You have already solved this challenge');
+    if (teamSolve) {
+      throw new ConflictException(
+        'Your team has already solved this challenge',
+      );
     }
 
     // 4. Compare flag against bcrypt flagHash
@@ -72,18 +77,23 @@ export class SubmissionsService {
       };
     }
 
-    // 6. If correct: record solve and update team score atomically
+    // 6. If correct: record solve and update team score atomically inside transaction
     await this.prisma.$transaction(async (tx) => {
+      // Race check within transaction
       const raceCheck = await tx.submission.findFirst({
         where: {
-          userId: user.id,
           challengeId: challenge.id,
           isCorrect: true,
+          user: {
+            teamId: user.teamId,
+          },
         },
       });
 
       if (raceCheck) {
-        throw new BadRequestException('You have already solved this challenge');
+        throw new ConflictException(
+          'Your team has already solved this challenge',
+        );
       }
 
       await tx.submission.create({

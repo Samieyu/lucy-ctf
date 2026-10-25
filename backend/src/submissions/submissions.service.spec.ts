@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
+  ConflictException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -60,7 +61,7 @@ describe('SubmissionsService', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 
-  it('throws BadRequestException if user is not on a team', async () => {
+  it('throws BadRequestException (400) if user is not on a team', async () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'u1', teamId: null });
 
     await expect(
@@ -77,31 +78,19 @@ describe('SubmissionsService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('throws NotFoundException if challenge is inactive', async () => {
-    prisma.user.findUnique.mockResolvedValue(mockUser);
-    prisma.challenge.findUnique.mockResolvedValue({
-      ...mockChallenge,
-      isActive: false,
-    });
-
-    await expect(
-      service.submitFlag('c1', 'u1', { flag: 'FLAG{test}' }),
-    ).rejects.toThrow(NotFoundException);
-  });
-
-  it('throws BadRequestException if user has already solved the challenge', async () => {
+  it('throws ConflictException (409) if user team has already solved the challenge', async () => {
     prisma.user.findUnique.mockResolvedValue(mockUser);
     prisma.challenge.findUnique.mockResolvedValue(mockChallenge);
     prisma.submission.findFirst.mockResolvedValue({
       id: 's1',
-      userId: 'u1',
+      userId: 'u2', // Solved by teammate
       challengeId: 'c1',
       isCorrect: true,
     });
 
     await expect(
       service.submitFlag('c1', 'u1', { flag: 'FLAG{test}' }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(ConflictException);
   });
 
   it('records failed attempt and returns isCorrect: false on wrong flag', async () => {

@@ -2,10 +2,20 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
 
-export interface LeaderboardEntry {
+export interface TeamLeaderboardEntry {
   rank: number;
   name: string;
   points: number;
+  solves: number;
+  solveCount: number;
+}
+
+export interface UserLeaderboardEntry {
+  rank: number;
+  username: string;
+  name: string;
+  points: number;
+  solves: number;
   solveCount: number;
 }
 
@@ -15,8 +25,8 @@ export class LeaderboardService {
 
   async getTeamsLeaderboard(
     query: LeaderboardQueryDto,
-  ): Promise<LeaderboardEntry[]> {
-    const limit = query.limit ?? 50;
+  ): Promise<TeamLeaderboardEntry[]> {
+    const limit = Math.min(query.limit ?? 100, 100);
     const offset = query.offset ?? 0;
 
     const scores = await this.prisma.score.findMany({
@@ -44,7 +54,7 @@ export class LeaderboardService {
     });
 
     return scores.map((score, index) => {
-      const solveCount = new Set(
+      const solves = new Set(
         score.team.members.flatMap((member) =>
           member.submissions.map((sub) => sub.challengeId),
         ),
@@ -54,15 +64,16 @@ export class LeaderboardService {
         rank: offset + index + 1,
         name: score.team.name,
         points: score.points,
-        solveCount,
+        solves,
+        solveCount: solves,
       };
     });
   }
 
   async getUsersLeaderboard(
     query: LeaderboardQueryDto,
-  ): Promise<LeaderboardEntry[]> {
-    const limit = query.limit ?? 50;
+  ): Promise<UserLeaderboardEntry[]> {
+    const limit = Math.min(query.limit ?? 100, 100);
     const offset = query.offset ?? 0;
 
     const users = await this.prisma.user.findMany({
@@ -92,16 +103,18 @@ export class LeaderboardService {
         (sum, s) => sum + s.challenge.points,
         0,
       );
-      const solveCount = user.submissions.length;
+      const solves = user.submissions.length;
       const lastScoredAt = user.submissions.reduce(
         (latest, s) => (s.submittedAt > latest ? s.submittedAt : latest),
         new Date(0),
       );
 
       return {
+        username: user.username,
         name: user.username,
         points,
-        solveCount,
+        solves,
+        solveCount: solves,
         lastScoredAt,
       };
     });
@@ -117,8 +130,10 @@ export class LeaderboardService {
 
     return paginated.map((user, index) => ({
       rank: offset + index + 1,
+      username: user.username,
       name: user.name,
       points: user.points,
+      solves: user.solves,
       solveCount: user.solveCount,
     }));
   }

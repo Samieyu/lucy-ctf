@@ -7,7 +7,7 @@ export class LeaderboardQueryDto {
   @IsInt()
   @Min(1)
   @Max(100)
-  limit: number = 50;
+  limit: number = 100;
 
   @IsOptional()
   @Type(() => Number)

@@ -1,5 +1,6 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SubmissionsService } from './submissions.service';
 import { SubmitFlagDto } from './dto/submit-flag.dto';
@@ -20,6 +21,7 @@ export class SubmissionsController {
   constructor(private readonly submissionsService: SubmissionsService) {}
 
   @Post(':id/submit')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   submit(
     @Param('id') challengeId: string,
     @Req() req: AuthedRequest,
