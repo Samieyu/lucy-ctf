@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Lucy CTF — Frontend Web Client (Next.js 16 + Tailwind CSS)
 
-## Getting Started
+The Lucy CTF frontend is a modern web application built with **Next.js 16** (App Router, React 19), **TypeScript**, and **Tailwind CSS**. It follows an enterprise dark cybersecurity visual aesthetic.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🏗️ Architecture & Security Model
+
+### HttpOnly Cookie Authentication Proxy
+The frontend enforces a strict security perimeter:
+- The browser **never** connects directly to the NestJS backend port.
+- All requests are routed through Next.js API proxy routes (`app/api/...`), which read secure `httpOnly` cookies (`accessToken`, `refreshToken`) and forward requests to the internal backend.
+- If a 401 Unauthorized status is received, the proxy route automatically attempts a refresh token rotation once, updates the client cookies, and seamlessly retries the original request.
+
+---
+
+## 📱 Page Map
+
+```
+app/
+├── admin/
+│   ├── audit/        # Security audit log viewer with suspicious brute-force filters
+│   ├── challenges/   # Challenge authoring and CRUD
+│   ├── event/        # Competition start/end, freeze, and emergency pause controls
+│   ├── teams/        # Team roster review and score reset controls
+│   └── users/        # Competitor management, ban controls, admin role promotion
+├── challenges/
+│   ├── [id]/         # Challenge detail, hints accordion, AI tutor, writeup editor, instances
+│   └── page.tsx      # Category filter chips, point pool summary, solved badges
+├── leaderboard/      # Real-time team and individual scoreboards with freeze banners
+├── team/             # Team creation, invite code join, captain succession
+├── profile/          # Account security, TOTP 2FA setup with QR code & recovery keys
+├── login/            # Authentication with automatic TOTP 2FA detection
+├── register/         # Competitor registration
+├── forgot-password/  # Password reset request dispatch
+└── reset-password/   # Token-authenticated password reset
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🎨 Visual System & Components
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Theme**: Deep space aesthetic (`neutral-950` background, emerald accents for successes, amber touches for warnings, rose highlights for first bloods).
+- **[`EventBanner`](file:///c:/Users/User/Desktop/LUCY%20CTF/lucy-ctf/frontend/components/EventBanner.tsx)**: Persistent countdown timer displaying competition time remaining, paused status, or ended status.
+- **[`RealtimeNotifier`](file:///c:/Users/User/Desktop/LUCY%20CTF/lucy-ctf/frontend/components/RealtimeNotifier.tsx)**: Server-Sent Events (SSE) subscriber rendering real-time solve and first blood toast alerts.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 💻 Development Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```powershell
+# Install dependencies:
+npm install
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Run Next.js development server:
+npm run dev
 
-## Deploy on Vercel
+# Build production standalone bundle:
+npm run build
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Start production server:
+npm start
+```
