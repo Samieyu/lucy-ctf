@@ -2,21 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { LeaderboardQueryDto } from './dto/leaderboard-query.dto';
 
-export interface TeamLeaderboardEntry {
+export interface LeaderboardTeamEntry {
   rank: number;
   name: string;
   points: number;
   solves: number;
-  solveCount: number;
 }
 
-export interface UserLeaderboardEntry {
+export interface LeaderboardUserEntry {
   rank: number;
-  username: string;
   name: string;
   points: number;
   solves: number;
-  solveCount: number;
 }
 
 @Injectable()
@@ -25,116 +22,206 @@ export class LeaderboardService {
 
   async getTeamsLeaderboard(
     query: LeaderboardQueryDto,
-  ): Promise<TeamLeaderboardEntry[]> {
+    isAdmin = false,
+  ): Promise<LeaderboardTeamEntry[]> {
     const limit = Math.min(query.limit ?? 100, 100);
     const offset = query.offset ?? 0;
 
-    const scores = await this.prisma.score.findMany({
+    const event = await this.prisma.eventSettings.findFirst();
+    const isFrozen =
+      !isAdmin &&
+      !!event?.freezeLeaderboardAt &&
+      new Date() >= new Date(event.freezeLeaderboardAt);
+
+    if (isFrozen && event?.freezeLeaderboardAt) {
+      // Calculate snapshot up to freezeLeaderboardAt
+      const freezeTime = new Date(event.freezeLeaderboardAt);
+
+      const submissions = await this.prisma.submission.findMany({
+        where: {
+          isCorrect: true,
+          submittedAt: { lte: freezeTime },
+          user: { teamId: { not: null }, isBanned: false },
+        },
+        include: {
+          challenge: true,
+          user: { select: { team: true } },
+        },
+        orderBy: { submittedAt: 'asc' },
+      });
+
+      const teamStats = new Map<
+        string,
+        {
+          name: string;
+          points: number;
+          solves: number;
+          lastScoredAt: Date;
+          solvedChallenges: Set<string>;
+        }
+      >();
+
+      for (const sub of submissions) {
+        const team = sub.user.team;
+        if (!team) continue;
+
+        if (!teamStats.has(team.id)) {
+          teamStats.set(team.id, {
+            name: team.name,
+            points: 0,
+            solves: 0,
+            lastScoredAt: sub.submittedAt,
+            solvedChallenges: new Set<string>(),
+          });
+        }
+
+        const current = teamStats.get(team.id)!;
+        if (!current.solvedChallenges.has(sub.challengeId)) {
+          current.solvedChallenges.add(sub.challengeId);
+          current.points += sub.challenge.points;
+          current.solves += 1;
+          current.lastScoredAt = sub.submittedAt;
+        }
+      }
+
+      // Also ensure all existing teams are included (even with 0 points)
+      const allTeams = await this.prisma.team.findMany({
+        select: { id: true, name: true, createdAt: true },
+      });
+
+      for (const team of allTeams) {
+        if (!teamStats.has(team.id)) {
+          teamStats.set(team.id, {
+            name: team.name,
+            points: 0,
+            solves: 0,
+            lastScoredAt: team.createdAt,
+            solvedChallenges: new Set<string>(),
+          });
+        }
+      }
+
+      const sorted = Array.from(teamStats.values()).sort((a, b) => {
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+        return a.lastScoredAt.getTime() - b.lastScoredAt.getTime();
+      });
+
+      return sorted.slice(offset, offset + limit).map((t, idx) => ({
+        rank: offset + idx + 1,
+        name: t.name,
+        points: t.points,
+        solves: t.solves,
+      }));
+    }
+
+    // Live leaderboard (not frozen or admin requesting)
+    const teams = await this.prisma.team.findMany({
       include: {
-        team: {
-          select: {
-            name: true,
-            members: {
-              select: {
-                submissions: {
-                  where: { isCorrect: true },
-                  select: { challengeId: true },
-                },
-              },
+        score: true,
+        members: {
+          where: { isBanned: false },
+          include: {
+            submissions: {
+              where: { isCorrect: true },
+              select: { challengeId: true },
             },
           },
         },
       },
       orderBy: [
-        { points: 'desc' },
-        { lastScoredAt: 'asc' },
+        { score: { points: 'desc' } },
+        { score: { lastScoredAt: 'asc' } },
       ],
       skip: offset,
       take: limit,
     });
 
-    return scores.map((score, index) => {
-      const solves = new Set(
-        score.team.members.flatMap((member) =>
-          member.submissions.map((sub) => sub.challengeId),
-        ),
-      ).size;
+    return teams.map((team, idx) => {
+      const uniqueChallengeIds = new Set<string>();
+      for (const member of team.members) {
+        for (const sub of member.submissions) {
+          uniqueChallengeIds.add(sub.challengeId);
+        }
+      }
 
       return {
-        rank: offset + index + 1,
-        name: score.team.name,
-        points: score.points,
-        solves,
-        solveCount: solves,
+        rank: offset + idx + 1,
+        name: team.name,
+        points: team.score?.points ?? 0,
+        solves: uniqueChallengeIds.size,
       };
     });
   }
 
   async getUsersLeaderboard(
     query: LeaderboardQueryDto,
-  ): Promise<UserLeaderboardEntry[]> {
+    isAdmin = false,
+  ): Promise<LeaderboardUserEntry[]> {
     const limit = Math.min(query.limit ?? 100, 100);
     const offset = query.offset ?? 0;
 
+    const event = await this.prisma.eventSettings.findFirst();
+    const isFrozen =
+      !isAdmin &&
+      !!event?.freezeLeaderboardAt &&
+      new Date() >= new Date(event.freezeLeaderboardAt);
+
+    const submissionWhere: Record<string, unknown> = {
+      isCorrect: true,
+    };
+
+    if (isFrozen && event?.freezeLeaderboardAt) {
+      submissionWhere.submittedAt = {
+        lte: new Date(event.freezeLeaderboardAt),
+      };
+    }
+
     const users = await this.prisma.user.findMany({
-      where: {
+      where: { isBanned: false },
+      include: {
         submissions: {
-          some: { isCorrect: true },
-        },
-      },
-      select: {
-        username: true,
-        submissions: {
-          where: { isCorrect: true },
-          select: {
-            submittedAt: true,
-            challenge: {
-              select: {
-                points: true,
-              },
-            },
-          },
+          where: submissionWhere,
+          include: { challenge: true },
+          orderBy: { submittedAt: 'asc' },
         },
       },
     });
 
-    const rankedUsers = users.map((user) => {
-      const points = user.submissions.reduce(
-        (sum, s) => sum + s.challenge.points,
-        0,
-      );
-      const solves = user.submissions.length;
-      const lastScoredAt = user.submissions.reduce(
-        (latest, s) => (s.submittedAt > latest ? s.submittedAt : latest),
-        new Date(0),
-      );
+    const userStats = users.map((user) => {
+      const solvedChallenges = new Set<string>();
+      let points = 0;
+      let lastScoredAt = user.createdAt;
+
+      for (const sub of user.submissions) {
+        if (!solvedChallenges.has(sub.challengeId)) {
+          solvedChallenges.add(sub.challengeId);
+          points += sub.challenge.points;
+          lastScoredAt = sub.submittedAt;
+        }
+      }
 
       return {
-        username: user.username,
         name: user.username,
         points,
-        solves,
-        solveCount: solves,
+        solves: solvedChallenges.size,
         lastScoredAt,
       };
     });
 
-    rankedUsers.sort((a, b) => {
+    userStats.sort((a, b) => {
       if (b.points !== a.points) {
         return b.points - a.points;
       }
       return a.lastScoredAt.getTime() - b.lastScoredAt.getTime();
     });
 
-    const paginated = rankedUsers.slice(offset, offset + limit);
-
-    return paginated.map((user, index) => ({
-      rank: offset + index + 1,
-      username: user.username,
-      name: user.name,
-      points: user.points,
-      solves: user.solves,
-      solveCount: user.solveCount,
+    return userStats.slice(offset, offset + limit).map((u, idx) => ({
+      rank: offset + idx + 1,
+      name: u.name,
+      points: u.points,
+      solves: u.solves,
     }));
   }
 }

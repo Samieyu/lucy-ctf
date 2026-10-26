@@ -14,6 +14,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - ctf_internal
+
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: lucyctf-db-backup
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB:-lucyctf}
+      POSTGRES_USER: ${POSTGRES_USER:-lucyctf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lucyctf_secure_password}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
+    networks:
+      - ctf_internal
 
   api:
     build:
@@ -30,15 +53,21 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_in_env_refresh}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-llama-3.3-70b-versatile}
+      AI_HINTS_ENABLED: ${AI_HINTS_ENABLED:-false}
+      INSTANCES_ENABLED: ${INSTANCES_ENABLED:-false}
+      UPLOAD_DIR: /app/uploads
       PORT: 4000
-    ports:
-      - "4000:4000"
+    volumes:
+      - uploads_data:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 20s
+    networks:
+      - ctf_internal
 
   frontend:
     build:
@@ -53,14 +82,37 @@ services:
       BACKEND_INTERNAL_URL: http://api:4000
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
       PORT: 3000
-    ports:
-      - "3000:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - ctf_internal
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: lucyctf-nginx
+    restart: always
+    depends_on:
+      - frontend
+      - api
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - ctf_internal
 
 volumes:
   db_data_prod:
+  uploads_data:
+
+networks:
+  ctf_internal:
+    driver: bridge
+  ctf_isolated_net:
+    driver: bridge
+    internal: true

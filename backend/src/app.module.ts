@@ -9,6 +9,16 @@ import { TeamsModule } from './teams/teams.module';
 import { ChallengesModule } from './challenges/challenges.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { EventModule } from './event/event.module';
+import { HintsModule } from './hints/hints.module';
+import { GroqModule } from './groq/groq.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { AttachmentsModule } from './attachments/attachments.module';
+import { WriteupsModule } from './writeups/writeups.module';
+import { AdminModule } from './admin/admin.module';
+import { MailModule } from './mail/mail.module';
+import { InstancesModule } from './instances/instances.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -19,11 +29,21 @@ import { LeaderboardModule } from './leaderboard/leaderboard.module';
       },
     ]),
     PrismaModule,
+    RealtimeModule,
+    MailModule,
+    EventModule,
     AuthModule,
     TeamsModule,
     ChallengesModule,
     SubmissionsModule,
     LeaderboardModule,
+    HintsModule,
+    GroqModule,
+    AttachmentsModule,
+    WriteupsModule,
+    AdminModule,
+    InstancesModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

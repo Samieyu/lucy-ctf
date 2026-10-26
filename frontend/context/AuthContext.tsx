@@ -20,7 +20,11 @@ interface User {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ error?: string }>;
+  login: (
+    email: string,
+    password: string,
+    twoFactorCode?: string,
+  ) => Promise<{ error?: string; requires2FA?: boolean }>;
   register: (
     email: string,
     username: string,
@@ -54,16 +58,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (
+    email: string,
+    password: string,
+    twoFactorCode?: string,
+  ) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, twoFactorCode }),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       return { error: data.message || 'Login failed' };
+    }
+
+    if (data.requires2FA) {
+      return { requires2FA: true };
     }
 
     await refreshUser();

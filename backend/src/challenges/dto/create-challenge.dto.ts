@@ -1,32 +1,57 @@
 import {
-  IsString,
   IsEnum,
   IsInt,
-  Min,
+  IsNotEmpty,
   IsOptional,
-  MinLength,
+  IsString,
+  Min,
 } from 'class-validator';
-import { ChallengeCategory } from '@prisma/client';
+import { ChallengeCategory, ScoringMode } from '@prisma/client';
 
 export class CreateChallengeDto {
   @IsString()
-  @MinLength(3)
+  @IsNotEmpty()
   title: string;
 
   @IsString()
-  @MinLength(10)
+  @IsNotEmpty()
   description: string;
 
   @IsEnum(ChallengeCategory)
   category: ChallengeCategory;
 
+  @IsOptional()
+  @IsEnum(ScoringMode)
+  scoringMode?: ScoringMode = ScoringMode.STATIC;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
-  points: number;
+  points?: number = 100;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  initialPoints?: number = 500;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minPoints?: number = 100;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  decay?: number = 30;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  firstBloodBonus?: number = 10;
 
   @IsString()
-  @MinLength(1)
-  flag: string; // plain text in the request; hashed before storage, never stored/returned as-is
+  @IsNotEmpty()
+  flag: string;
 
   @IsOptional()
   @IsString()

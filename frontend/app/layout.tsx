@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import Navbar from '@/components/Navbar';
+import RealtimeNotifier from '@/components/RealtimeNotifier';
 
 export const metadata: Metadata = {
   title: 'Lucy CTF',
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-neutral-950 text-neutral-100 selection:bg-emerald-500/30 selection:text-emerald-300">
         <AuthProvider>
           <Navbar />
+          <RealtimeNotifier />
           <main className="flex-1 flex flex-col">{children}</main>
         </AuthProvider>
       </body>

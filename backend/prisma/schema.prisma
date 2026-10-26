@@ -13,41 +13,78 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  username     String   @unique
-  passwordHash String
-  isAdmin      Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                      String    @id @default(uuid())
+  email                   String    @unique
+  username                String    @unique
+  passwordHash            String
+  isAdmin                 Boolean   @default(false)
+  isBanned                Boolean   @default(false)
+  banReason               String?
+  emailVerified           Boolean   @default(true)
+  emailVerificationToken  String?
+  passwordResetToken      String?
+  passwordResetExpiresAt  DateTime?
+  twoFactorSecret         String?
+  twoFactorEnabled        Boolean   @default(false)
+  twoFactorRecoveryCodes  String?   // JSON array string of hashed recovery codes
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
-  teamId       String?
-  team         Team?    @relation(fields: [teamId], references: [id])
-  captainOfTeam Team? @relation("TeamCaptain")
+  teamId                  String?
+  team                    Team?     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  captainOfTeam           Team?     @relation("TeamCaptain")
 
-  submissions  Submission[]
+  submissions             Submission[]
+  aiHints                 AiHintUsage[]
+  firstBloods             FirstBlood[]
+  writeups                Writeup[]
+  refreshTokens           RefreshToken[]
+  auditLogs               AuditLog[] @relation("Actor")
 
+  @@index([email])
+  @@index([username])
   @@map("users")
 }
 
 model Team {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  inviteCode String   @unique @default(uuid())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              String   @id @default(uuid())
+  name            String   @unique
+  inviteCode      String   @unique @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  captainId  String?  @unique
-  captain    User?    @relation("TeamCaptain", fields: [captainId], references: [id])
+  captainId       String?  @unique
+  captain         User?    @relation("TeamCaptain", fields: [captainId], references: [id], onDelete: SetNull)
 
-  members    User[]   @relation
-  scores     Score[]
+  members         User[]   @relation
+  scores          Score[]
+  hintUnlocks     HintUnlock[]
+  firstBloods     FirstBlood[]
+  writeups        Writeup[]
+  instances       ChallengeInstance[]
 
   @@map("teams")
 }
 
 // ---------------------------------------------------------------------------
-// Challenges
+// Event Settings
+// ---------------------------------------------------------------------------
+
+model EventSettings {
+  id                   String    @id @default("default")
+  name                 String    @default("Lucy CTF")
+  startsAt             DateTime  @default(now())
+  endsAt               DateTime
+  freezeLeaderboardAt  DateTime?
+  isPaused             Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("event_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Challenges, Hints, Attachments
 // ---------------------------------------------------------------------------
 
 enum ChallengeCategory {
@@ -59,21 +96,125 @@ enum ChallengeCategory {
   PWN
 }
 
-model Challenge {
-  id          String            @id @default(uuid())
-  title       String            @unique
-  description String
-  category    ChallengeCategory
-  points      Int               @default(100)
-  flagHash    String
-  filePath    String?
-  isActive    Boolean           @default(true)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+enum ScoringMode {
+  STATIC
+  DYNAMIC
+}
 
-  submissions Submission[]
+model Challenge {
+  id                 String               @id @default(uuid())
+  title              String               @unique
+  description        String
+  category           ChallengeCategory
+  points             Int                  @default(100)
+  scoringMode        ScoringMode          @default(STATIC)
+  initialPoints      Int                  @default(500)
+  minPoints          Int                  @default(100)
+  decay              Int                  @default(30)
+  firstBloodBonus    Int                  @default(10) // percentage bonus (e.g. 10%)
+  flagHash           String
+  filePath           String?
+  isActive           Boolean              @default(true)
+  isDynamicInstance  Boolean              @default(false)
+  dockerImage        String?
+  instancePort       Int?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  submissions        Submission[]
+  hints              Hint[]
+  firstBlood         FirstBlood?
+  attachments        ChallengeAttachment[]
+  writeups           Writeup[]
+  instances          ChallengeInstance[]
+  aiHints            AiHintUsage[]
 
   @@map("challenges")
+}
+
+model Hint {
+  id           String        @id @default(uuid())
+  challengeId  String
+  challenge    Challenge     @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  text         String
+  cost         Int           @default(0)
+  order        Int           @default(1)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  unlocks      HintUnlock[]
+
+  @@map("hints")
+}
+
+model HintUnlock {
+  id          String   @id @default(uuid())
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  hintId      String
+  hint        Hint     @relation(fields: [hintId], references: [id], onDelete: Cascade)
+  unlockedAt  DateTime @default(now())
+
+  @@unique([teamId, hintId])
+  @@map("hint_unlocks")
+}
+
+model AiHintUsage {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId  String
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  question     String
+  response     String
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, challengeId])
+  @@map("ai_hint_usage")
+}
+
+model FirstBlood {
+  id           String    @id @default(uuid())
+  challengeId  String    @unique
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bonusPoints  Int       @default(0)
+  createdAt    DateTime  @default(now())
+
+  @@map("first_bloods")
+}
+
+model ChallengeAttachment {
+  id              String    @id @default(uuid())
+  challengeId     String
+  challenge       Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  filename        String
+  storedFilename  String
+  fileSize        Int
+  mimeType        String
+  sha256          String
+  createdAt       DateTime  @default(now())
+
+  @@map("challenge_attachments")
+}
+
+model Writeup {
+  id           String    @id @default(uuid())
+  challengeId  String
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content      String    // Markdown content
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([teamId, challengeId])
+  @@map("writeups")
 }
 
 // ---------------------------------------------------------------------------
@@ -81,28 +222,85 @@ model Challenge {
 // ---------------------------------------------------------------------------
 
 model Submission {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   challengeId String
-  challenge   Challenge @relation(fields: [challengeId], references: [id])
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
 
   isCorrect   Boolean
-  submittedAt DateTime @default(now())
+  submittedAt DateTime  @default(now())
 
+  @@index([userId, challengeId])
+  @@index([challengeId, isCorrect])
+  @@index([submittedAt])
   @@map("submissions")
 }
 
 model Score {
   id           String   @id @default(uuid())
   teamId       String
-  team         Team     @relation(fields: [teamId], references: [id])
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   points       Int      @default(0)
   lastScoredAt DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([teamId])
+  @@index([points, lastScoredAt])
   @@map("scores")
+}
+
+// ---------------------------------------------------------------------------
+// Auth, Security, Audit Logs & Instances
+// ---------------------------------------------------------------------------
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  familyId    String
+  isRevoked   Boolean  @default(false)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([userId, familyId])
+  @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  actor       User?    @relation("Actor", fields: [actorId], references: [id], onDelete: SetNull)
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    String?  // JSON string
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model ChallengeInstance {
+  id              String    @id @default(uuid())
+  challengeId     String
+  challenge       Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  teamId          String
+  team            Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  containerId     String?
+  port            Int?
+  connectionHost  String?
+  status          String    @default("STARTING") // STARTING, RUNNING, STOPPED, EXPIRED
+  expiresAt       DateTime
+  extensionsCount Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([teamId, challengeId])
+  @@map("challenge_instances")
 }

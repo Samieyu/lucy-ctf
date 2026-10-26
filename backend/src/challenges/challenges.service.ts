@@ -1,22 +1,34 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { ChallengeCategory } from '@prisma/client';
+import { ChallengeCategory, ScoringMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
+import { calculateDynamicPoints } from './scoring.util';
 
 const SALT_ROUNDS = 12;
 
-// Fields safe to expose publicly — flagHash is deliberately never included
 const PUBLIC_SELECT = {
   id: true,
   title: true,
   description: true,
   category: true,
   points: true,
+  scoringMode: true,
+  initialPoints: true,
+  minPoints: true,
+  decay: true,
+  firstBloodBonus: true,
   filePath: true,
   isActive: true,
+  isDynamicInstance: true,
   createdAt: true,
+  firstBlood: {
+    select: {
+      team: { select: { name: true } },
+      createdAt: true,
+    },
+  },
 };
 
 @Injectable()
@@ -31,7 +43,12 @@ export class ChallengesService {
         title: dto.title,
         description: dto.description,
         category: dto.category,
-        points: dto.points,
+        points: dto.points ?? 100,
+        scoringMode: dto.scoringMode ?? ScoringMode.STATIC,
+        initialPoints: dto.initialPoints ?? 500,
+        minPoints: dto.minPoints ?? 100,
+        decay: dto.decay ?? 30,
+        firstBloodBonus: dto.firstBloodBonus ?? 10,
         flagHash,
         filePath: dto.filePath,
       },
@@ -68,7 +85,7 @@ export class ChallengesService {
     });
 
     return challenges.map((challenge) => {
-      const { submissions, ...data } = challenge;
+      const { submissions, firstBlood, ...data } = challenge;
 
       const solved = Boolean(
         user?.teamId
@@ -79,17 +96,31 @@ export class ChallengesService {
       const distinctSolvers = new Set(
         submissions.map((s) => s.user.teamId || s.userId),
       );
+      const solveCount = distinctSolvers.size;
+
+      const currentPoints =
+        data.scoringMode === ScoringMode.DYNAMIC
+          ? calculateDynamicPoints(
+              data.initialPoints,
+              data.minPoints,
+              data.decay,
+              solveCount,
+            )
+          : data.points;
 
       return {
         ...data,
+        points: currentPoints,
         solved,
-        solveCount: distinctSolvers.size,
+        solveCount,
+        firstBlood: firstBlood
+          ? { teamName: firstBlood.team.name, at: firstBlood.createdAt }
+          : null,
       };
     });
   }
 
   async findAllAdmin() {
-    // Admin view includes inactive challenges too, still never the flag
     return this.prisma.challenge.findMany({
       select: PUBLIC_SELECT,
       orderBy: { createdAt: 'asc' },
@@ -120,7 +151,7 @@ export class ChallengesService {
       throw new NotFoundException('Challenge not found');
     }
 
-    const { submissions, ...data } = challenge;
+    const { submissions, firstBlood, ...data } = challenge;
 
     const solved = Boolean(
       user?.teamId
@@ -131,11 +162,26 @@ export class ChallengesService {
     const distinctSolvers = new Set(
       submissions.map((s) => s.user.teamId || s.userId),
     );
+    const solveCount = distinctSolvers.size;
+
+    const currentPoints =
+      data.scoringMode === ScoringMode.DYNAMIC
+        ? calculateDynamicPoints(
+            data.initialPoints,
+            data.minPoints,
+            data.decay,
+            solveCount,
+          )
+        : data.points;
 
     return {
       ...data,
+      points: currentPoints,
       solved,
-      solveCount: distinctSolvers.size,
+      solveCount,
+      firstBlood: firstBlood
+        ? { teamName: firstBlood.team.name, at: firstBlood.createdAt }
+        : null,
     };
   }
 

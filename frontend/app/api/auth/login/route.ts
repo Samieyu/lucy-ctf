@@ -19,23 +19,31 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: backendRes.status });
   }
 
+  if (data.requires2FA) {
+    return NextResponse.json(data, { status: 200 });
+  }
+
   const response = NextResponse.json({ success: true });
 
-  response.cookies.set('accessToken', data.accessToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: ACCESS_TOKEN_MAX_AGE,
-  });
+  if (data.accessToken) {
+    response.cookies.set('accessToken', data.accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: ACCESS_TOKEN_MAX_AGE,
+    });
+  }
 
-  response.cookies.set('refreshToken', data.refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: REFRESH_TOKEN_MAX_AGE,
-  });
+  if (data.refreshToken) {
+    response.cookies.set('refreshToken', data.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: REFRESH_TOKEN_MAX_AGE,
+    });
+  }
 
   return response;
 }

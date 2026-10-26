@@ -39,3 +39,58 @@ This document tracks all assumptions made during the autonomous build of Lucy CT
 ## Step 8: Production Deployment
 - **Multi-Stage Dockerfiles**: Production containers with minimal image footprint, running `node dist/main` in backend and standalone server in Next.js.
 - **Migration & Healthchecks**: Automatically executes `prisma migrate deploy` before API startup.
+
+---
+
+## ADVANCED FEATURES (Steps A through L)
+
+### Step A: Event Control (CTF Window & Freeze)
+- **Singleton Table**: `EventSettings` has a single row (`id: "global"`) created or seeded at first boot.
+- **Window Gating**: If `isPaused` is true or if current time is outside `[startsAt, endsAt]`, flag submissions are rejected with HTTP 403.
+- **Leaderboard Freeze**: When `now >= freezeLeaderboardAt` and the viewer is not an admin, public leaderboards compute standings using only solves submitted on or before `freezeLeaderboardAt`. Admins bypass the freeze and always see live data.
+- **Navbar Banner**: Real-time countdown banner displays CTF starts in, time remaining, competition paused, or competition ended states.
+
+### Step B: Hints with Cost
+- **Score Deduction**: Unlocking a hint deducts its cost from `Score.points` atomically inside a Prisma transaction and records a `HintUnlock` row.
+- **Zero Cost or Unlocked**: Unlocked hints or free hints return the hint `text`. Locked hints never expose `text` in any API.
+- **Confirmation Dialog**: Frontend UI presents an explicit confirmation dialog informing the participant that points will be subtracted from their team's score.
+
+### Step C: Groq AI Hint Assistant
+- **Flag Sanitization & Redaction**: The model prompt never includes the challenge flag or hash. Responses from Groq are filtered through regex to replace any strings matching flag formats (`FLAG{...}`, `LUCY{...}`) with `[redacted]`.
+- **Usage Throttling**: Limited to 5 requests per user per challenge, tracked in the `AiHintUsage` table.
+- **Timeout & Fallback**: Requests timeout after 8 seconds; if `GROQ_API_KEY` is absent or the API fails, a graceful fallback message is returned.
+
+### Step D: Dynamic Scoring & First Blood
+- **Scoring Formulas**: Challenges support `STATIC` or `DYNAMIC` mode. Dynamic scoring uses standard CTFd parabolic decay between `initialPoints` and `minPoints` based on `decay` solve thresholds.
+- **First Blood**: The first team to solve a challenge earns a configurable first blood bonus (default 20%). Concurrent first blood attempts are handled safely with database unique constraints on `challengeId`.
+
+### Step E: File Attachments & Writeups
+- **Attachment Guardrails**: Files are limited to 25MB with whitelisted extensions (`.zip`, `.tar.gz`, `.pcap`, `.elf`, `.bin`, `.txt`, `.py`, `.c`, etc.). Stored using UUID filenames and served via authenticated streaming with SHA256 checksum verification.
+- **Team Writeups**: Markdown writeups can only be submitted and viewed by members of the team that solved the challenge or by platform administrators.
+
+### Step F: Admin Management & Audit Logs
+- **Audit Trails**: All sensitive actions (login, flag submit, user ban, role modification, score reset, event setting update) are written to `AuditLog`.
+- **Brute Force & Collision Detection**: Rapid failed flag submissions (>50/hour) or IP collisions across multiple teams trigger `isSuspicious: true` signals in the audit log.
+
+### Step G: Account Security (2FA & Refresh Rotation)
+- **TOTP 2FA**: RFC 6238 time-based one-time passwords via `otplib`. Generates 8 single-use recovery codes upon activation.
+- **Refresh Token Rotation**: Refresh tokens belong to a `familyId`. If an already-revoked refresh token is re-submitted, all active tokens in that family are immediately revoked (reuse attack detection).
+- **Email Verification & Password Reset**: SMTP mailer with console fallback for local development. Secure single-use tokens expiring in 1 hour.
+
+### Step H: Real-time Updates (SSE)
+- **Server-Sent Events**: Real-time broadcast channel at `GET /events/stream` pushing solve events, first blood announcements, and freeze updates to connected clients.
+- **Frontend Realtime Notifier**: Toast popup notifications appear automatically upon receiving SSE broadcasts.
+
+### Step I: Dynamic Challenge Instances
+- **Docker Socket Proxy**: The backend talks to a Docker socket proxy over HTTP rather than mounting the raw Unix socket directly into the application container.
+- **Resource Limits & TTL**: Ephemeral containers are constrained to 128MB RAM, 0.5 CPU, and a 30-minute default TTL (extendable by 15m), gated behind the `INSTANCES_ENABLED` environment flag.
+
+### Step J: Observability & Performance
+- **Database Indexing**: Comprehensive B-tree and composite indexes on `submissions(userId, challengeId, isCorrect, submittedAt)`, `users(teamId)`, `audit_logs(createdAt, isSuspicious)`.
+- **Health & Metrics**: Liveness (`/health`), Readiness (`/ready` with PostgreSQL `SELECT 1`), and Prometheus metrics (`/metrics`).
+- **Load Testing**: k6 load test script (`scripts/loadtest.js`) validating 200 concurrent VUs with `p(95) < 500ms`.
+
+### Step K & L: Production Architecture & Security Review
+- **Reverse Proxy**: Nginx reverse proxy with bufferless SSE streaming, gzip compression, 30MB body limit, and hardened SSL cipher suites.
+- **Automated Backups**: Nightly postgres database backup service with 7-day retention in `docker-compose.prod.yml`.
+- **Security Guide**: Comprehensive `docs/SECURITY.md`, `docs/DEPLOYMENT.md`, and `docs/OPERATIONS.md`.
