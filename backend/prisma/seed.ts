@@ -1,5 +1,5 @@
 import { PrismaClient, ChallengeCategory, ScoringMode } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 const SALT_ROUNDS = 12;
